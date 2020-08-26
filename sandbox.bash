@@ -11,7 +11,7 @@
 # 
 # @Name:         sandbox.bash
 # @Author:       Tobias Marczewski
-# @Last Edit:    2020-08-24
+# @Last Edit:    2020-08-26
 # @Version:      0.1
 # @Location:     /usr/local/bin/sandbox
 #
@@ -19,8 +19,9 @@
 # for +( ) in parameter expansion
 shopt -s extglob
 
-#SANDBOX_SETTINGS_FOLDER=".sandbox"
-SANDBOX_SETTINGS_FOLDER="sandbox_test"
+SANDBOX_PROJECT_DIR=$(pwd)
+#SANDBOX_SETTINGS_FOLDER=""${SANDBOX_PROJECT_DIR}/.sandbox"
+SANDBOX_SETTINGS_FOLDER="${SANDBOX_PROJECT_DIR}/sandbox_test"
 SANDBOX_SETTINGS_FILE="${SANDBOX_SETTINGS_FOLDER}/sandbox.settings"
 SANDBOX_SSH_FOLDER="${SANDBOX_SETTINGS_FOLDER}/ssh"
 SANDBOX_SSH_CONFIG="${SANDBOX_SSH_FOLDER}/config"
@@ -42,6 +43,9 @@ SANDBOX_TRACKED_FILES_FILE="${SANDBOX_SETTINGS_FOLDER}/tracked.files"
 
 function main() {
 
+    local project_dir
+
+    readonly project_dir=$(pwd)
     ## TODO
     # var - files to be synced when 'push'
     
@@ -55,28 +59,104 @@ function usage() {
 
 
 ################################################################################
-# Setup a .sandbox directory and save all the settings for the server...
+# Setup a .sandbox directory and save all the settings for the server.
+# Also check connectivity to the server and enable gpg key authentication.
 #
-## notes
-# in the directory on the host, the folder will contain a .sandbox folder
-# containing all the settings for the 'sandbox server':
-# - server name / ip
-# - login user
-# >> when setup the user will be asked for the password, and then ssh gpg
-#    keys will be setup automatically
-# >> option to add .sandbox to .gitignore
+# Global Variables:
+#    SANDBOX_SETTINGS_FOLDER
+#    SANDBOX_SETTINGS_FILE
+#    SANDBOX_SSH_FOLDER
+#    SANDBOX_SSH_CONFIG
+#    SANDBOX_SSH_KEY
+#    SANDBOX_TRACKED_FILES_FILE
 #
 function setup() {
-    echo "not implemented"
+    local server_ip
+    local server_user_name
+
+    ## Ensure needed folders exist
+    mkdir "$SANDBOX_SETTINGS_FOLDER"
+    mkdir "$SANDBOX_SSH_FOLDER"
+
+    ## Create needed files
+    touch "$SANDBOX_SETTINGS_FILE"
+    touch "$SANDBOX_TRACKED_FILES_FILE"
+
+    ## Enter default settings into settings file
+    write_setting "SANDBOX_SERVER_SANDBOX_DIR" "Sandbox"
+
+    
+    ## Generate ssh key
+    ssh-keygen -t rsa -N '' -f "$SANDBOX_SSH_KEY"
+
+    
+    ## Add key to authorized_keys on server
+    ## get login details for server
+    echo "Setting up key authorized server login."
+
+    server_ip=$(read_server_ip)
+    if (( "$?" != 0 )); then
+	echo "Error setting the IP address for the sandbox server." >&2
+	return 1
+    fi
+
+    read -p 'Server User: ' server_user_name
+
+    readonly server_ip
+    readonly server_user_name
+    
+    ssh-copy-id -i "${SANDBOX_SSH_KEY}.pub" \
+		"${server_user_name}@${server_ip}" >/dev/null 2>&1
+    
+    ## Write config file
+    cat <<EOF > "$SANDBOX_SSH_CONFIG"
+Host Sandbox
+    HostName ${server_ip}
+    User ${server_user_name}
+    IdentityFile ${SANDBOX_SSH_KEY}
+EOF
+
+    ## Check that ssh works
+    execute_on_server 'exit' >/dev/null 2>&1
+    if (( "$?" != 0 )); then
+	echo "SSH setup not working correctly, check manually!" >&2
+	return 1
+    fi
+    
     return 0
 }
 
-
 ################################################################################
-# Push a file or the whole project to the server
+# Add one or more files / directories to the SANDBOX_TRACKED_FILES_FILE.
 #
 # Arguments:
-#    $1 - filename(s) to push OR push-all to push the whole repo
+#    $1..$n - files to add
+#
+# Global Variables:
+#    SANDBOX_TRACKED_FILES_FILE
+#
+function add_file_to_tracked_files() {
+    return 0
+}
+
+################################################################################
+# Remove one or several files from the SANDBOX_TRACKED_FILES_FILE.
+#
+# Arguments:
+#    $1..$n - files to remove
+#
+# Global Variables:
+#    SANDBOX_TRACKED_FILES_FILE
+#
+function remove_file_from_tracked_files() {
+    return 0
+}
+
+################################################################################
+# Push the files listed in the SANDBOX_TRACKED_FILES_FILE to the sandbox server.
+#
+# Global Variables:
+#    SANDBOX_TRACKED_FILES_FILE
 #
 function push() {
     
@@ -86,13 +166,45 @@ function push() {
 
 
 ################################################################################
+# Prompt and read the server ip as input; also test if it is ping-able.
+#
+# Output:
+#    the server ip
+# Returns:
+#    0 - when ip valid and ping-able
+#    1 - on cancel or error
+# 
+function read_server_ip() {
+    local server_ip
+
+    while true
+    do
+	read -p 'Server IP [C|cancel]: ' server_ip
+	case "$server_ip" in
+	    "C"|"c"|"Cancel"|"cancel")
+		return 1
+		;;
+	esac
+	
+
+	if ( ping -c 3 "${server_ip}" >/dev/null ); then
+	    echo "$server_ip"
+	    return 0
+	else
+	    echo "Couldn't reach server at ${server_ip}." >&2
+	    echo "Please make sure the server is online." >&2
+	fi
+    done
+}
+
+################################################################################
 # Read the value for the specified setting from the settings file.
 #
 # Arguments:
 #    $1 - setting
 #
 # Global Variables:
-#    SETTINGS_FILE
+#    SANDBOX_SETTINGS_FILE
 #
 # Output:
 #    value of the setting
@@ -121,7 +233,7 @@ function read_setting() {
 
     ## Extract the value
     ##
-    setting_line=$(grep "^\\s*${setting}\\s*=" "$SETTINGS_FILE")
+    setting_line=$(grep "^\\s*${setting}\\s*=" "$SANDBOX_SETTINGS_FILE")
     value="${setting_line##*=+( )}"
     
     echo "${value}"	      
@@ -134,7 +246,7 @@ function read_setting() {
 #    $2 - value
 #
 # Global Variables:
-#    SETTINGS_FILE
+#    SANDBOX_SETTINGS_FILE
 #
 function write_setting() {
     local setting
@@ -161,10 +273,10 @@ function write_setting() {
 	## will be read as separator in the command for sed!
 	##
 	sed -i "s;^\\s*\(${setting}\)\\s*=\\s*\(\\S.*\)\\s*$;\1 = ${value};" \
-	    "$SETTINGS_FILE"
+	    "$SANDBOX_SETTINGS_FILE"
     else
 	## enter the setting and the value
-	echo "${setting} = ${value}" >> "$SETTINGS_FILE"
+	echo "${setting} = ${value}" >> "$SANDBOX_SETTINGS_FILE"
     fi
 }
 
@@ -175,7 +287,7 @@ function write_setting() {
 #         setting has exactly one match
 #
 # Global Variables:
-#    SETTINGS_FILE
+#    SANDBOX_SETTINGS_FILE
 #
 function settings_file_contains_setting() {
     local setting
@@ -197,7 +309,7 @@ function settings_file_contains_setting() {
     fi
 
     
-    number_of_matches=$(grep -c "^\\s*${setting}\\s*=" "$SETTINGS_FILE")
+    number_of_matches=$(grep -c "^\\s*${setting}\\s*=" "$SANDBOX_SETTINGS_FILE")
 
     if (( $number_of_matches == 1 )); then
 	return 0
@@ -211,44 +323,21 @@ function settings_file_contains_setting() {
 
 ################################################################################
 # Arguments:
+#    $1 - commands to execute
+#
 # Global Variables:
+#    SANDBOX_SSH_CONFIG
+#
+function execute_on_server() {
+    local command
 
-function generate_ssh_key() {
-    #ssh-keygen -t rsa -N '' -f $filename
-    return 0
-}
-
-
-
-function write_sandbox_ssh_config() {
-    local config_file
-
-    config_file="$1"
-
-    cat <<-EOF > "$config_file"
-    Host ${server_name}
-    	 HostName ${server_ip}
-	 User ${server_user_name}
-	 IdentityFile ${ssh_identity_file}
-EOF
+    if [[ -z "$1" ]]; then
+	command='exit 0'
+    else
+	command="$1"
+    fi
     
-    return 0
-}
-
-
-function connect_to_server() {
-    ssh -F $ssh_config_file
+    ssh -F "$SANDBOX_SSH_CONFIG" Sandbox -o PasswordAuthentication=no "$command"
     return
 }
-
-
-# ssh
-# server_ip 192.168.56.200
-# server_user tester
-ssh -F $ssh_config_file
-
-# ssh config
-
-
-read_setting "$@"
 
