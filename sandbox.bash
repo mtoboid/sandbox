@@ -42,19 +42,45 @@ SANDBOX_TRACKED_FILES_FILE="${SANDBOX_SETTINGS_FOLDER}/tracked.files"
 
 
 function main() {
-
-    local project_dir
-
-    readonly project_dir=$(pwd)
-    ## TODO
-    # var - files to be synced when 'push'
+    declare -r self="${0##*/}"
+    local action
     
-    exit 0
+    if [[ -z "$1" ]]; then
+	echo "Error: No action specified!" >&2
+	echo "See '${self} usage for info." >&2
+	exit 1
+    fi
+
+    readonly action="$1"
+    shift
+
+    case "$action" in
+	"usage")
+	    usage
+	    ;;
+	"setup")
+	    setup
+	    ;;
+	"list")
+	    list_tracked_files
+	    ;;
+	"add")
+	    add_to_tracked_files "$@"
+	    ;;
+	"remove")
+	    remove_from_tracked_files "$@"
+	    ;;
+	*)
+	    echo "Unknown action ${action}." >&2
+	    echo "See '${self} usage for info." >&2
+	    exit 1
+    esac
 }
+
 
 function usage() {
     echo "not implemented"
-    return 0
+    exit 0
 }
 
 
@@ -97,7 +123,7 @@ function setup() {
     server_ip=$(read_server_ip)
     if (( "$?" != 0 )); then
 	echo "Error setting the IP address for the sandbox server." >&2
-	return 1
+	exit 1
     fi
 
     read -p 'Server User: ' server_user_name
@@ -120,50 +146,11 @@ EOF
     execute_on_server 'exit' >/dev/null 2>&1
     if (( "$?" != 0 )); then
 	echo "SSH setup not working correctly, check manually!" >&2
-	return 1
+	exit 1
     fi
     
-    return 0
+    exit 0
 }
-
-################################################################################
-# Add one or more files / directories to the SANDBOX_TRACKED_FILES_FILE.
-#
-# Arguments:
-#    $1..$n - files to add
-#
-# Global Variables:
-#    SANDBOX_TRACKED_FILES_FILE
-#
-function add_file_to_tracked_files() {
-    return 0
-}
-
-################################################################################
-# Remove one or several files from the SANDBOX_TRACKED_FILES_FILE.
-#
-# Arguments:
-#    $1..$n - files to remove
-#
-# Global Variables:
-#    SANDBOX_TRACKED_FILES_FILE
-#
-function remove_file_from_tracked_files() {
-    return 0
-}
-
-################################################################################
-# Push the files listed in the SANDBOX_TRACKED_FILES_FILE to the sandbox server.
-#
-# Global Variables:
-#    SANDBOX_TRACKED_FILES_FILE
-#
-function push() {
-    
-    echo "not implemented"
-    return 0
-}
-
 
 ################################################################################
 # Prompt and read the server ip as input; also test if it is ping-able.
@@ -196,6 +183,145 @@ function read_server_ip() {
 	fi
     done
 }
+
+
+################################################################################
+# List files currently in the tracked files file
+#
+function list_tracked_files() {
+    echo "Currently tracked files:"
+    echo "----------------------------------------------------------------------"
+    cat "$SANDBOX_TRACKED_FILES_FILE"
+    echo "----------------------------------------------------------------------"
+    exit 0
+}
+
+################################################################################
+# Add files/directories to the tracked files file
+#
+# Arguments:
+#    $1..$n - files to add (globbing supported)
+#
+# Global Variables:
+#    SANDBOX_TRACKED_FILES_FILE
+#
+function add_to_tracked_files() {
+    declare -a FILES
+
+    add_files_to_FILES "$@"
+
+    IFS=$'\n'
+    echo "${FILES[*]}" >> "$SANDBOX_TRACKED_FILES_FILE"
+    unset IFS
+
+    sort_and_remove_duplicates "$SANDBOX_TRACKED_FILES_FILE"
+    exit
+}
+
+################################################################################
+# Remove files/directories from the tracked files file
+#
+# Arguments:
+#    $1..$n - files to remove (globbing supported)
+#
+# Global Variables:
+#    SANDBOX_TRACKED_FILES_FILE
+#
+function remove_from_tracked_files() {
+    declare -a FILES
+ 
+    add_files_to_FILES "$@"
+
+    for file in "${FILES[@]}"; do
+	sed -i "\;^${file}$;d" "$SANDBOX_TRACKED_FILES_FILE"
+    done
+
+    sort_and_remove_duplicates "$SANDBOX_TRACKED_FILES_FILE"
+    exit
+}
+
+################################################################################
+# Sort the filenames / paths in a file (one per line) and remove duplicates
+#
+# Arguments:
+#    $1 - path to file containing filenames / dirnames (one per line)
+#
+# Output:
+#    none - file provided as argument is changed in place.
+#
+function sort_and_remove_duplicates() {
+    local textfile
+    declare -a files
+
+    if [[ -z "$1" ]]; then
+	echo "sort_and_remove_duplicates() Error: No file specified." >&2
+	exit 1
+    fi
+
+    readonly textfile="$1"
+
+    if [[ ! -f "$textfile" ]]; then
+	echo "sort_and_remove_duplicates() Error: " \
+	     "File ${textfile} not found." >&2
+	exit 1
+    fi
+
+    if [[ ! -r "$textfile" ]] || [[ ! -w "$textfile" ]]; then
+	echo "sort_and_remove_duplicates() Error: " \
+	     "No adequate read/write permissions for ${textfile}." >&2
+	exit 1
+    fi
+
+    IFS=$'\n'
+    
+    files=($(sort "$textfile" | uniq))
+    echo "${files[*]}" > "$textfile"
+
+    unset IFS
+ 
+    return 0
+}
+
+################################################################################
+# Check if the arguments passed are existing files/dirs and if so, add them
+# to the array 'FILES'
+#
+# Arguments:
+#    $1..$n file names or globs
+#
+# Output:
+#    none - files added to FILES
+#
+function add_files_to_FILES() {
+
+    ## check if variable FILES exists FIXME
+
+    ## add files to FILES
+    for file in "$@"; do
+	## don't follow . or ..
+	if [[ "$file" == "." ]] || [[ "$file" == ".." ]]; then
+	    continue
+	fi
+	## only accept existing files
+	if [[ -e "$file" ]]; then
+	    FILES+=($(realpath "$file"))
+	fi
+    done
+}
+
+
+################################################################################
+# Push the files listed in the SANDBOX_TRACKED_FILES_FILE to the sandbox server.
+#
+# Global Variables:
+#    SANDBOX_TRACKED_FILES_FILE
+#
+function push() {
+    
+    echo "not implemented"
+    exit 0
+}
+
 
 ################################################################################
 # Read the value for the specified setting from the settings file.
