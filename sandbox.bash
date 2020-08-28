@@ -11,7 +11,7 @@
 # 
 # @Name:         sandbox.bash
 # @Author:       Tobias Marczewski
-# @Last Edit:    2020-08-26
+# @Last Edit:    2020-08-28
 # @Version:      0.1
 # @Location:     /usr/local/bin/sandbox
 #
@@ -19,6 +19,7 @@
 # for +( ) in parameter expansion
 shopt -s extglob
 
+## Fixed variable settings
 SANDBOX_PROJECT_DIR=$(pwd)
 #SANDBOX_SETTINGS_FOLDER=""${SANDBOX_PROJECT_DIR}/.sandbox"
 SANDBOX_SETTINGS_FOLDER="${SANDBOX_PROJECT_DIR}/sandbox_test"
@@ -28,7 +29,8 @@ SANDBOX_SSH_CONFIG="${SANDBOX_SSH_FOLDER}/config"
 SANDBOX_SSH_KEY="${SANDBOX_SSH_FOLDER}/server_rsa"
 SANDBOX_TRACKED_FILES_FILE="${SANDBOX_SETTINGS_FOLDER}/tracked.files"
 
-# SANDBOX_SERVER_SANDBOX_DIR
+## Read from the settings file $SANDBOX_SETTINGS_FILE
+unset SANDBOX_SERVER_SANDBOX_DIR
 
 
 # rsync options:
@@ -70,6 +72,9 @@ function main() {
 	"remove")
 	    remove_from_tracked_files "$@"
 	    ;;
+	"push")
+	    push_files_to_server
+	    ;;
 	*)
 	    echo "Unknown action ${action}." >&2
 	    echo "See '${self} usage for info." >&2
@@ -109,7 +114,7 @@ function setup() {
     touch "$SANDBOX_TRACKED_FILES_FILE"
 
     ## Enter default settings into settings file
-    write_setting "SANDBOX_SERVER_SANDBOX_DIR" "Sandbox"
+    write_setting "SANDBOX_SERVER_SANDBOX_DIR" "Sandbox/$(basename $(realpath ..))"
 
     
     ## Generate ssh key
@@ -143,9 +148,8 @@ Host Sandbox
 EOF
 
     ## Check that ssh works
-    execute_on_server 'exit' >/dev/null 2>&1
-    if (( "$?" != 0 )); then
-	echo "SSH setup not working correctly, check manually!" >&2
+    if ( ! server_online ); then
+	echo "SSH setup did not work correctly, please check manually." >&2
 	exit 1
     fi
     
@@ -314,13 +318,37 @@ function add_files_to_FILES() {
 # Push the files listed in the SANDBOX_TRACKED_FILES_FILE to the sandbox server.
 #
 # Global Variables:
+#    SANDBOX_SETTINGS_FILE
+#        - SANDBOX_SERVER_SANDBOX_DIR (in settings file)
 #    SANDBOX_TRACKED_FILES_FILE
 #
-function push() {
+function push_files_to_server() {
+    SANDBOX_SERVER_SANDBOX_DIR=$(read_setting "SANDBOX_SERVER_SANDBOX_DIR")
+
+    if ( ! server_online ); then
+	echo "Error: could not connect to server, insure it is online." >&2
+	exit 1
+    fi
+
+    ## Ensure Sandbox folder exists on server
+    local exec_command
+    exec_command=$(echo '[[ ! -e "${SANDBOX_SERVER_SANDBOX_DIR}" ]] && ' \
+			'mkdir -p "${SANDBOX_SERVER_SANDBOX_DIR}"')
+    execute_on_server "$exec_command"
     
-    echo "not implemented"
+    ## Sync the tracked files
+    rsync -tR --files-from="$SANDBOX_TRACKED_FILES_FILE}" --delete-before \
+	  -e 'ssh -F "$SANDBOX_SSH_CONFIG" Sandbox -o PasswordAuthentication=no' \
+	  :"$SANDBOX_SERVER_SANDBOX_DIR"
+    # where:
+    # -t only transfer when newer at source
+    # -R use relative paths at destination
+    
     exit 0
 }
+
+
+
 
 
 ################################################################################
@@ -448,6 +476,16 @@ function settings_file_contains_setting() {
 
 
 ################################################################################
+# Check if server is online and ssh is working
+#
+function server_online() {
+    declare -i exit_code
+    execute_on_server "-o ConnectTimeout=2 'exit 0'"
+    exit_code="$?"
+    return "$exit_code"
+}
+
+################################################################################
 # Arguments:
 #    $1 - commands to execute
 #
@@ -467,3 +505,7 @@ function execute_on_server() {
     return
 }
 
+
+## ENTRY POINT
+##
+main "$@"
