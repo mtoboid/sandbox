@@ -404,20 +404,23 @@ function add_to_tracked_files() {
 #
 # Arguments:
 #    $1..$n - files to remove (globbing supported)
+#             to use a regex on the added files list, quote the pattern
+#             file* will do globbing in the terminal, resulting in all files
+#             starting with file.. in the current directory to be passed.
+#             "file*" will instead be changed to the regex 'file.*' and
+#             apply to all files in the tracked files that match the pattern.
 #
 # Global Variables:
 #    SANDBOX_TRACKED_FILES_FILE
 #
 function remove_from_tracked_files() {
-    declare -a FILES
- 
-    add_files_to_FILES "$@"
-
-    for file in "${FILES[@]}"; do
-	sed -i "\;^${file}$;d" "$SANDBOX_TRACKED_FILES_FILE"
-    done
 
     sort_and_remove_duplicates "$SANDBOX_TRACKED_FILES_FILE"
+    
+    for pattern in "${@//\*/.*}"; do
+	sed -i "\;^${pattern}$;d" "$SANDBOX_TRACKED_FILES_FILE"
+    done
+
     exit
 }
 
