@@ -32,18 +32,11 @@ SANDBOX_TRACKED_FILES_FILE="${SANDBOX_SETTINGS_FOLDER}/tracked.files"
 ## Read from the settings file $SANDBOX_SETTINGS_FILE
 unset SANDBOX_SERVER_SANDBOX_DIR
 
-
-# rsync options:
-# -t   only transfer changed files
-# --files-from=FILE   transfer files listed in FILE
-
-
-# have a function that adds/removes filenames from a file, which
-# - can be listed
-# - are used for rsync to push them to the sandbox server
-
-
+## MAIN
 function main() {
+    ## Build an array for 'self' to be able to append the action
+    ## chosen - for better error output.
+    ##
     declare -a self=("${0##*/}")
     local action
     
@@ -63,6 +56,9 @@ function main() {
 	    ;;
 	"setup")
 	    setup
+	    ;;
+	"clean")
+	    clean_all
 	    ;;
 	"server")
 	    server_settings "$@"
@@ -88,7 +84,37 @@ function main() {
 
 
 function usage() {
-    echo "not implemented"
+
+    cat <<-EOF
+
+   Sync selected files of a local project directory with a sandbox directory
+   on a server (a virtual machine) for testing purposes.
+
+   Usage: ${self[0]} ACTION
+   
+   Actions:
+   
+       usage	        Show this information.
+   		        
+       setup	        Enable the current project directory for sandbox.
+		        
+       clean	        Remove files and settings from sandbox server, and also
+       		        from the local project directory.   
+       server 	        
+         show	        Display the current base directory on the sandbox server.
+       	 set <path>     Set the base directory to <path>.
+   	    	        (relative to the server-login-user HOME directory ~/<path>)
+           	        
+       list	        Display files currently tracked for syncing.
+   
+       add <files>      Add files to the tracked list (supports globbing).
+   
+       remove <files>   Remove files from the tracked list (supports globbing).
+   
+       push   	        Sync the tracked files with the sandbox server.
+   
+EOF
+
     exit 0
 }
 
@@ -192,6 +218,73 @@ function read_server_ip() {
     done
 }
 
+
+################################################################################
+# Remove all files and settings from the sandbox server, and in the project dir
+#
+function clean_all() {
+    local public_key
+    local user_confirmation
+    SANDBOX_SERVER_SANDBOX_DIR=$(read_setting "SANDBOX_SERVER_SANDBOX_DIR")
+
+    echo "This will reset the sandbox server settings, and remove all " \
+	 "settings for sandbox for this project!"
+    read -p "Proceed? [ yes / Cancel ]: " user_confirmation
+
+    case "$user_confirmation" in
+	"Y"|"y"|"Yes"|"yes")
+	    if ( ! server_online ); then
+		echo "Error: could not connect to server, insure it is online." >&2
+		exit 1
+	    else
+		echo "Cleaning up..."
+	    fi
+	    ;;
+	*)
+	    echo "Aborting..."
+	    exit 0
+	    ;;
+    esac
+    
+    ## Clean files on server:
+    ## 1) Remove Sandbox dir
+    ##
+    execute_on_server "rm -rf \"${SANDBOX_SERVER_SANDBOX_DIR}\""
+
+    if (( "$?" != 0 )); then
+	echo "Error: could not remove sandbox base dir on server." >&2
+	exit 1
+    fi
+    
+    ## 2) Delete public key from authorized_keys on server
+    ##
+    public_key=$(cat "${SANDBOX_SSH_KEY}.pub")
+    execute_on_server "sed -i '\;${public_key};d' .ssh/authorized_keys"
+
+    if (( "$?" != 0 )); then
+	echo "Error: could not remove rsa key from authorized_keys on server." >&2
+	exit 1
+    fi
+    
+    ## Clean local files
+    ## Delete the sandbox settings folder
+    ##
+    rm -rf "$SANDBOX_SSH_FOLDER"
+
+    if (( "$?" != 0 )); then
+	echo "Error: could not delete ${SANDBOX_SSH_FOLDER}." >&2
+	exit 1
+    fi
+    
+    rm -rf "$SANDBOX_SETTINGS_FOLDER"
+
+    if (( "$?" != 0 )); then
+	echo "Error: could not delete ${SANDBOX_SETTINGS_FOLDER}." >&2
+	exit 1
+    fi
+    
+    exit 0
+}
 
 
 ################################################################################
@@ -374,7 +467,7 @@ function push_files_to_server() {
     SANDBOX_SERVER_SANDBOX_DIR=$(read_setting "SANDBOX_SERVER_SANDBOX_DIR")
 
     if ( ! server_online ); then
-	echo "Error: could not connect to server, insure it is online." >&2
+	echo "Error: could not connect to server, ensure it is online." >&2
 	exit 1
     fi
 
