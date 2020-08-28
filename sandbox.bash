@@ -370,6 +370,9 @@ function server_settings() {
 # List files currently in the tracked files file
 #
 function list_tracked_files() {
+    
+    sort_and_remove_duplicates "$SANDBOX_TRACKED_FILES_FILE"
+    
     echo "Currently tracked files:"
     echo "----------------------------------------------------------------------"
     cat "$SANDBOX_TRACKED_FILES_FILE"
@@ -514,8 +517,10 @@ function add_files_to_FILES() {
 #    SANDBOX_TRACKED_FILES_FILE
 #
 function push_files_to_server() {
-    SANDBOX_SERVER_SANDBOX_DIR=$(read_setting "SANDBOX_SERVER_SANDBOX_DIR")
 
+    SANDBOX_SERVER_SANDBOX_DIR=$(read_setting "SANDBOX_SERVER_SANDBOX_DIR")
+    sort_and_remove_duplicates "$SANDBOX_TRACKED_FILES_FILE"
+    
     if ( ! server_online ); then
 	echo "Error: could not connect to server, ensure it is online." >&2
 	exit 1
