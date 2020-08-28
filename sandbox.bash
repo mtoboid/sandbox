@@ -480,28 +480,47 @@ function settings_file_contains_setting() {
 #
 function server_online() {
     declare -i exit_code
-    execute_on_server "-o ConnectTimeout=2 'exit 0'"
+    execute_on_server 'exit 0'
     exit_code="$?"
     return "$exit_code"
 }
 
 ################################################################################
+# Execute a command on the sandbox server via ssh.
+#
 # Arguments:
-#    $1 - commands to execute
+#    $1..$n - commands to execute
+#             if ssh options are passed the switch and value should be passed
+#             as separate arguments, e.g.: "-o" "ConnectionAttempts=3"
+#             commands should be enclosed in single quotes:
+#             'for i in {1..5}; do echo $i; done'
 #
 # Global Variables:
 #    SANDBOX_SSH_CONFIG
 #
 function execute_on_server() {
-    local command
+    declare -a ssh_args
 
+    ## Not providing a command would lead to a non-terminated ssh connection
+    ## to the server, which we don't want within this script.
+    ##
     if [[ -z "$1" ]]; then
-	command='exit 0'
-    else
-	command="$1"
+	echo "execute_on_server() Error: no command specified" >&2
+	exit 1
     fi
     
-    ssh -F "$SANDBOX_SSH_CONFIG" Sandbox -o PasswordAuthentication=no "$command"
+    ssh_args+=("-F" "$SANDBOX_SSH_CONFIG")
+    ssh_args+=("Sandbox")
+    ssh_args+=("-o" "PasswordAuthentication=no")
+    ssh_args+=("-o" "ConnectTimeout=3")
+
+    while [[ -n "$1" ]]; do
+	ssh_args+=("$1")
+	shift
+    done
+
+    ssh "${ssh_args[@]}"
+    
     return
 }
 
