@@ -12,7 +12,7 @@
 # @Name:         sandbox.bash
 # @Author:       Tobias Marczewski
 # @Last Edit:    2020-08-28
-# @Version:      0.1
+# @Version:      0.8
 # @Location:     /usr/local/bin/sandbox
 #
 
@@ -21,8 +21,7 @@ shopt -s extglob
 
 ## Fixed variable settings
 SANDBOX_PROJECT_DIR=$(pwd)
-#SANDBOX_SETTINGS_FOLDER=""${SANDBOX_PROJECT_DIR}/.sandbox"
-SANDBOX_SETTINGS_FOLDER="${SANDBOX_PROJECT_DIR}/sandbox_test"
+SANDBOX_SETTINGS_FOLDER="${SANDBOX_PROJECT_DIR}/.sandbox"
 SANDBOX_SETTINGS_FILE="${SANDBOX_SETTINGS_FOLDER}/sandbox.settings"
 SANDBOX_SSH_FOLDER="${SANDBOX_SETTINGS_FOLDER}/ssh"
 SANDBOX_SSH_CONFIG="${SANDBOX_SSH_FOLDER}/config"
@@ -137,7 +136,16 @@ function setup() {
 
     ## Ensure needed folders exist
     mkdir "$SANDBOX_SETTINGS_FOLDER"
+
+    if (( "$?" != 0 )); then
+	setup_error "Couldn't create ${SANDBOX_SETTINGS_FOLDER}."
+    fi
+
     mkdir "$SANDBOX_SSH_FOLDER"
+
+    if (( "$?" != 0 )); then
+	setup_error "Couldn't create ${SANDBOX_SSH_FOLDER}."
+    fi
 
     ## Create needed files
     touch "$SANDBOX_SETTINGS_FILE"
@@ -145,30 +153,34 @@ function setup() {
 
     ## Enter default settings into settings file
     write_setting "SANDBOX_SERVER_SANDBOX_DIR" "Sandbox/$(basename $(realpath .))"
-
-    
+   
     ## Generate ssh key
     ssh-keygen -t rsa -N '' -f "$SANDBOX_SSH_KEY"
 
-    
-    ## Add key to authorized_keys on server
-    ## get login details for server
-    echo "Setting up key authorized server login."
+    if (( "$?" != 0 )); then
+	setup_error "Couldn't create ssh key."
+    fi
+
+    echo "Setting up key-authorized server login."
 
     server_ip=$(read_server_ip)
     if (( "$?" != 0 )); then
-	echo "Error setting the IP address for the sandbox server." >&2
-	exit 1
+	setup_error "could not determine IP address for the sandbox server."
     fi
 
     read -p 'Server User: ' server_user_name
 
     readonly server_ip
     readonly server_user_name
-    
+
+    ## Add public ssh-key to authorized_keys on server
     ssh-copy-id -i "${SANDBOX_SSH_KEY}.pub" \
 		"${server_user_name}@${server_ip}" >/dev/null 2>&1
-    
+
+    if (( "$?" != 0 )); then
+	setup_error "Couldn't copy public ssh-key to sandbox server. (ssh-copy-id)"
+    fi
+	
     ## Write config file
     cat <<EOF > "$SANDBOX_SSH_CONFIG"
 Host Sandbox
@@ -179,11 +191,32 @@ EOF
 
     ## Check that ssh works
     if ( ! server_online ); then
-	echo "SSH setup did not work correctly, please check manually." >&2
+	echo "Setup finished, but failed to connect to server - " \
+	     "please check manually." >&2
+	echo "ssh -F ${SANDBOX_SSH_CONFIG} Sandbox" >&2
 	exit 1
     fi
     
     exit 0
+}
+
+
+################################################################################
+# Remove files / folders created during setup (if this fails)
+#
+# Arguments:
+#    $1 - message to display
+#
+function setup_error() {
+    local error_message
+    error_message=$(echo "$@")
+    
+    echo "${self[@]} Error: ${error_message}" >&2
+    
+    rm -rf "$SANDBOX_SSH_FOLDER"
+    rm -rf "$SANDBOX_SETTINGS_FOLDER"
+    
+    exit 1
 }
 
 ################################################################################
@@ -288,6 +321,12 @@ function clean_all() {
 
 
 ################################################################################
+# Show or set the sandbox base directory on the server.
+#
+# Arguments:
+#    $1  - action ('show' or 'set')
+#   [$2] - the new setting for the base dir [for action 'set']
+#          (path relative to user@server:~/<path>)
 #
 # Global Varibles:
 #    SANDBOX_SETTINGS_FILE
