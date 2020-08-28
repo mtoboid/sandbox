@@ -114,7 +114,7 @@ function setup() {
     touch "$SANDBOX_TRACKED_FILES_FILE"
 
     ## Enter default settings into settings file
-    write_setting "SANDBOX_SERVER_SANDBOX_DIR" "Sandbox/$(basename $(realpath ..))"
+    write_setting "SANDBOX_SERVER_SANDBOX_DIR" "Sandbox/$(basename $(realpath .))"
 
     
     ## Generate ssh key
@@ -293,6 +293,9 @@ function sort_and_remove_duplicates() {
 # Arguments:
 #    $1..$n file names or globs
 #
+# Global Variables:
+#    SANDBOX_PROJECT_DIR
+#
 # Output:
 #    none - files added to FILES
 #
@@ -308,7 +311,7 @@ function add_files_to_FILES() {
 	fi
 	## only accept existing files
 	if [[ -e "$file" ]]; then
-	    FILES+=($(realpath "$file"))
+	    FILES+=($(realpath --relative-to="${SANDBOX_PROJECT_DIR}" "$file"))
 	fi
     done
 }
@@ -332,22 +335,36 @@ function push_files_to_server() {
 
     ## Ensure Sandbox folder exists on server
     local exec_command
-    exec_command=$(echo '[[ ! -e "${SANDBOX_SERVER_SANDBOX_DIR}" ]] && ' \
-			'mkdir -p "${SANDBOX_SERVER_SANDBOX_DIR}"')
+    exec_command=$(echo "[[ ! -e \"${SANDBOX_SERVER_SANDBOX_DIR}\" ]] && " \
+    			"mkdir -p \"${SANDBOX_SERVER_SANDBOX_DIR}\"")
+
     execute_on_server "$exec_command"
+
+    if (( "$?" != 0 )); then
+    	echo "Could not create project dir ${SANDBOX_SERVER_SANDBOX_DIR}" \
+    	     "on server." >&2
+    	exit 1
+    fi
     
     ## Sync the tracked files
-    rsync -tR --files-from="$SANDBOX_TRACKED_FILES_FILE}" --delete-before \
-	  -e 'ssh -F "$SANDBOX_SSH_CONFIG" Sandbox -o PasswordAuthentication=no' \
-	  :"$SANDBOX_SERVER_SANDBOX_DIR"
+    declare -i exit_code
+
+    rsync -tR --files-from="$SANDBOX_TRACKED_FILES_FILE" --delete-before \
+    	  -e "ssh -F ${SANDBOX_SSH_CONFIG} Sandbox -o PasswordAuthentication=no" \
+    	  "${SANDBOX_PROJECT_DIR}" :"${SANDBOX_SERVER_SANDBOX_DIR}"
     # where:
     # -t only transfer when newer at source
     # -R use relative paths at destination
+
+    exit_code="$?"
+    
+    if (( "$exit_code" != 0 )); then
+	echo "Error during rsync (code: ${exit_code})" >&2
+	exit 1
+    fi
     
     exit 0
 }
-
-
 
 
 
