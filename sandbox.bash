@@ -425,7 +425,8 @@ function remove_from_tracked_files() {
 }
 
 ################################################################################
-# Sort the filenames / paths in a file (one per line) and remove duplicates
+# Sort the filenames / paths in a file (one per line) and remove duplicates.
+# Also remove any non-existing files from the list.
 #
 # Arguments:
 #    $1 - path to file containing filenames / dirnames (one per line)
@@ -459,7 +460,14 @@ function sort_and_remove_duplicates() {
     IFS=$'\n'
     
     files=($(sort "$textfile" | uniq))
-    echo "${files[*]}" > "$textfile"
+
+    rm "$textfile" && touch "$textfile"
+    
+    for file in "${files[@]}"; do
+	if [[ -e "$file" ]]; then
+	    echo "$file" >> "$textfile"
+	fi
+    done
 
     unset IFS
  
