@@ -44,7 +44,7 @@ unset SANDBOX_SERVER_SANDBOX_DIR
 
 
 function main() {
-    declare -r self="${0##*/}"
+    declare -a self=("${0##*/}")
     local action
     
     if [[ -z "$1" ]]; then
@@ -55,6 +55,7 @@ function main() {
 
     readonly action="$1"
     shift
+    self+=("${action}")
 
     case "$action" in
 	"usage")
@@ -62,6 +63,9 @@ function main() {
 	    ;;
 	"setup")
 	    setup
+	    ;;
+	"server")
+	    server_settings "$@"
 	    ;;
 	"list")
 	    list_tracked_files
@@ -77,7 +81,7 @@ function main() {
 	    ;;
 	*)
 	    echo "Unknown action ${action}." >&2
-	    echo "See '${self} usage for info." >&2
+	    echo "See '${self[0]} usage for info." >&2
 	    exit 1
     esac
 }
@@ -186,6 +190,47 @@ function read_server_ip() {
 	    echo "Please make sure the server is online." >&2
 	fi
     done
+}
+
+
+
+################################################################################
+#
+# Global Varibles:
+#    SANDBOX_SETTINGS_FILE
+#    SANDBOX_SERVER_SANDBOX_DIR
+#
+function server_settings() {
+    local action
+
+    if [[ -z "$1" ]]; then
+	echo "Error (${self[@]}): no action provided." >&2
+	echo "See '${self[0]} usage' for help" >&2
+	exit 1
+    fi
+
+    readonly action="$1"
+
+    case "$action" in
+	"show")
+	    read_setting "SANDBOX_SERVER_SANDBOX_DIR"
+	    exit
+	    ;;
+	"set" )
+	    if [[ -z "$2" ]]; then
+		echo "(${self[@]}): No new base dir on the server provided." >&2
+		echo "Unsetting the server dir is not supported." >&2
+		echo "To set the dir to the root of the user home set it to '~'" >&2
+		exit 1
+	    fi
+	    write_setting "SANDBOX_SERVER_SANDBOX_DIR" "$2"
+	    exit
+	    ;;
+	*)
+	    echo "(${self[@]}): unknown action '${action}'" >&2
+	    exit 1
+	    ;;
+    esac
 }
 
 
@@ -365,7 +410,6 @@ function push_files_to_server() {
     
     exit 0
 }
-
 
 
 ################################################################################
