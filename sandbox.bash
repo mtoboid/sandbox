@@ -94,7 +94,7 @@ function main() {
 	    ;;
 	*)
 	    echo "Unknown action ${action}." >&2
-	    echo "See '${self[0]} usage for info." >&2
+	    echo "See '${self[0]} usage' for info." >&2
 	    exit 1
     esac
 
@@ -255,6 +255,8 @@ EOF
 	echo "ssh -F ${SANDBOX_SSH_CONFIG} Sandbox" >&2
 	exit 1
     fi
+
+    echo "Successfully enabled ${self[0]} for this project."
     
     return 0
 }
