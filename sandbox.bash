@@ -30,6 +30,7 @@ SANDBOX_TRACKED_FILES_FILE="${SANDBOX_SETTINGS_FOLDER}/tracked.files"
 
 ## Read from the settings file $SANDBOX_SETTINGS_FILE
 unset SANDBOX_SERVER_SANDBOX_DIR
+unset EXCLUDED_FILES
 
 ## MAIN
 function main() {
@@ -72,13 +73,13 @@ function main() {
 	    remove_from_tracked_files "$@"
 	    ;;
 	"list-excluded")
-	    excluded_files "list"
+	    files_excluded_from_tracking "list"
 	    ;;
 	"add-excluded")
-	    excluded_files "add" "$@"
+	    files_excluded_from_tracking "add" "$@"
 	    ;;
 	"remove-excluded")
-	    excluded_files "remove" "$@"
+	    files_excluded_from_tracking "remove" "$@"
 	    ;;
 
 	"push")
@@ -170,6 +171,8 @@ function setup() {
 
     ## Enter default settings into settings file
     write_setting "SANDBOX_SERVER_SANDBOX_DIR" "Sandbox/$(basename $(realpath .))"
+    write_setting "EXCLUDED_FILES" \
+       "$(realpath --relative-to=${SANDBOX_PROJECT_DIR} ${SANDBOX_SETTINGS_FOLDER}):.git*"
    
     ## Generate ssh key
     ssh-keygen -t rsa -N '' -f "$SANDBOX_SSH_KEY"
@@ -446,7 +449,9 @@ function remove_from_tracked_files() {
 
 ################################################################################
 # Sort the filenames / paths in a file (one per line) and remove duplicates.
-# Also remove any non-existing files from the list.
+# Also removes:
+#    - any non-existing files
+#    - files listed in EXCLUDED_FILES setting
 #
 # Arguments:
 #    $1 - path to file containing filenames / dirnames (one per line)
@@ -457,6 +462,7 @@ function remove_from_tracked_files() {
 function sort_and_remove_duplicates() {
     local textfile
     declare -a files
+    declare -a excluded_files
 
     if [[ -z "$1" ]]; then
 	echo "sort_and_remove_duplicates() Error: No file specified." >&2
@@ -477,10 +483,11 @@ function sort_and_remove_duplicates() {
 	exit 1
     fi
 
-    IFS=$'\n'
+    IFS=$':\n'
     
     files=($(sort "$textfile" | uniq))
 
+    
     rm "$textfile" && touch "$textfile"
     
     for file in "${files[@]}"; do
@@ -542,7 +549,7 @@ function add_files_to_FILES() {
 #    "add"  - adds the files to the setting EXCLUDED_FILES [write_setting()]
 #    "remove" - removes files from setting EXCLUDED_FILES [write_setting()]
 #
-function excluded_files() {
+function files_excluded_from_tracking() {
     declare -a excluded_files
     local action
 
