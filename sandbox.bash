@@ -50,6 +50,14 @@ function main() {
     shift
     self+=("${action}")
 
+    if ( ( ! is_sandbox_enabled ) &&
+	     ! ( [[ "$action" == "setup" ]] || [[ "$action" == "usage" ]] ) )
+    then
+	echo "Current project is not setup for ${self[0]} yet." >&2
+	echo "Please see '${self[0]} usage' or use '${self[0]} setup'." >&2
+	exit 1
+    fi
+    
     case "$action" in
 	"usage")
 	    usage
@@ -138,6 +146,31 @@ EOF
 
 
 ################################################################################
+# Check if the current project/directory has a setup sandbox environment.
+# (Check if the folder and settings files are there...)
+#
+# Global Variables
+#    SANDBOX_SETTINGS_FOLDER
+#    SANDBOX_SETTINGS_FILE
+#    SANDBOX_SSH_CONFIG
+#    SANDBOX_SSH_KEY
+#    SANDBOX_TRACKED_FILES_FILE
+
+function is_sandbox_enabled() {
+
+    if ( [[ ! -e "$SANDBOX_SETTINGS_FOLDER" ]] ||
+	     [[ ! -e "$SANDBOX_SETTINGS_FILE" ]] ||
+	     [[ ! -e "$SANDBOX_SSH_CONFIG" ]] ||
+	     [[ ! -e "$SANDBOX_SSH_KEY" ]] ||
+	     [[ ! -e "$SANDBOX_TRACKED_FILES_FILE" ]] )
+    then
+	return 1
+    else
+	return 0	
+    fi	
+}
+
+################################################################################
 # Setup a .sandbox directory and save all the settings for the server.
 # Also check connectivity to the server and enable gpg key authentication.
 #
@@ -153,6 +186,11 @@ function setup() {
     local server_ip
     local server_user_name
 
+    if ( is_sandbox_enabled ); then
+	echo "Current directory seems to be already set up for ${self[0]}" >&2
+	exit 1
+    fi
+    
     ## Ensure needed folders exist
     mkdir "$SANDBOX_SETTINGS_FOLDER"
 
