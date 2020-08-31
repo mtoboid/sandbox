@@ -81,7 +81,6 @@ function main() {
 	"remove-excluded")
 	    files_excluded_from_tracking "remove" "$@"
 	    ;;
-
 	"push")
 	    push_files_to_server
 	    ;;
@@ -90,6 +89,8 @@ function main() {
 	    echo "See '${self[0]} usage for info." >&2
 	    exit 1
     esac
+
+    exit 0
 }
 
 
@@ -132,7 +133,7 @@ function usage() {
    
 EOF
 
-    exit 0
+    return 0
 }
 
 
@@ -217,7 +218,7 @@ EOF
 	exit 1
     fi
     
-    exit 0
+    return 0
 }
 
 
@@ -336,7 +337,7 @@ function clean_all() {
 	exit 1
     fi
     
-    exit 0
+    return 0
 }
 
 
@@ -366,7 +367,7 @@ function server_settings() {
     case "$action" in
 	"show")
 	    read_setting "SANDBOX_SERVER_SANDBOX_DIR"
-	    exit
+	    return
 	    ;;
 	"set" )
 	    if [[ -z "$2" ]]; then
@@ -376,7 +377,7 @@ function server_settings() {
 		exit 1
 	    fi
 	    write_setting "SANDBOX_SERVER_SANDBOX_DIR" "$2"
-	    exit
+	    return
 	    ;;
 	*)
 	    echo "(${self[@]}): unknown action '${action}'" >&2
@@ -393,11 +394,9 @@ function list_tracked_files() {
     
     sort_and_remove_duplicates "$SANDBOX_TRACKED_FILES_FILE"
     
-    echo "Currently tracked files:"
-    echo "----------------------------------------------------------------------"
     cat "$SANDBOX_TRACKED_FILES_FILE"
-    echo "----------------------------------------------------------------------"
-    exit 0
+
+    return 0
 }
 
 ################################################################################
@@ -410,16 +409,19 @@ function list_tracked_files() {
 #    SANDBOX_TRACKED_FILES_FILE
 #
 function add_to_tracked_files() {
+    local enclosing_IFS
     declare -a FILES
 
     add_files_to_FILES "$@"
 
+    readonly enclosing_IFS="$IFS"
     IFS=$'\n'
     echo "${FILES[*]}" >> "$SANDBOX_TRACKED_FILES_FILE"
-    unset IFS
+    IFS="$enclosing_IFS"
 
     sort_and_remove_duplicates "$SANDBOX_TRACKED_FILES_FILE"
-    exit
+
+    return
 }
 
 ################################################################################
@@ -444,7 +446,7 @@ function remove_from_tracked_files() {
 	sed -i "\;^${pattern}$;d" "$SANDBOX_TRACKED_FILES_FILE"
     done
 
-    exit
+    return
 }
 
 ################################################################################
@@ -460,6 +462,7 @@ function remove_from_tracked_files() {
 #    none - file provided as argument is changed in place.
 #
 function sort_and_remove_duplicates() {
+    local enclosing_IFS
     local textfile
     declare -a files
     declare -a excluded_files
@@ -483,23 +486,37 @@ function sort_and_remove_duplicates() {
 	exit 1
     fi
 
-    IFS=$':\n'
+    readonly enclosing_IFS="$IFS"
+    IFS=$'\n'
     
     files=($(sort "$textfile" | uniq))
+    excluded_files=($(files_excluded_from_tracking "list"))
+    ## escape dots
+    excluded_files="${excluded_files//./\\.}"
+    ## replace globbing * with regex .*
+    excluded_files="${excluded_files//\*/.*}"
 
-    
     rm "$textfile" && touch "$textfile"
     
     for file in "${files[@]}"; do
+	## Do not add if in excluded files
+	for ex_file in "${excluded_files[@]}"; do
+	    if (( $(echo "$file" | grep -c "^${ex_file}") > 0 )); then
+		continue 2
+	    fi
+	done
+	
+	## Do not add if it does not exist
 	if [[ -e "$file" ]]; then
 	    echo "$file" >> "$textfile"
 	fi
     done
 
-    unset IFS
+    IFS="$enclosing_IFS"
  
     return 0
 }
+
 
 ################################################################################
 # Check if the arguments passed are existing files/dirs and if so, add them
@@ -550,6 +567,7 @@ function add_files_to_FILES() {
 #    "remove" - removes files from setting EXCLUDED_FILES [write_setting()]
 #
 function files_excluded_from_tracking() {
+    local enclosing_IFS
     declare -a excluded_files
     local action
 
@@ -559,6 +577,7 @@ function files_excluded_from_tracking() {
     fi
 
     ## use path separator ':' to allow spaces in names
+    readonly enclosing_IFS="$IFS"
     IFS=$':\n'    
     excluded_files=($(read_setting "EXCLUDED_FILES"))
 
@@ -611,9 +630,9 @@ function files_excluded_from_tracking() {
 	    exit 1
     esac
     
-    unset IFS
+    IFS="$enclosing_IFS"
     
-    exit 0
+    return 0
 }
 
 ################################################################################
@@ -684,7 +703,7 @@ function push_files_to_server() {
 	exit 1
     fi
     
-    exit 0
+    return 0
 }
 
 
@@ -727,7 +746,7 @@ function read_setting() {
     setting_line=$(grep "^\\s*${setting}\\s*=" "$SANDBOX_SETTINGS_FILE")
     value="${setting_line##*=+( )}"
     
-    echo "${value}"	      
+    echo "${value}"
 }
 
 
