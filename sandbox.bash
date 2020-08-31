@@ -11,7 +11,7 @@
 # 
 # @Name:         sandbox.bash
 # @Author:       Tobias Marczewski
-# @Last Edit:    2020-08-28
+# @Last Edit:    2020-08-31
 # @Version:      0.8
 # @Location:     /usr/local/bin/sandbox
 #
@@ -71,6 +71,16 @@ function main() {
 	"remove")
 	    remove_from_tracked_files "$@"
 	    ;;
+	"list-excluded")
+	    excluded_files "list"
+	    ;;
+	"add-excluded")
+	    excluded_files "add" "$@"
+	    ;;
+	"remove-excluded")
+	    excluded_files "remove" "$@"
+	    ;;
+
 	"push")
 	    push_files_to_server
 	    ;;
@@ -109,6 +119,13 @@ function usage() {
        add <files>      Add files to the tracked list (supports globbing).
    
        remove <files>   Remove files from the tracked list (supports globbing).
+
+       list-excluded	List files currently never added to the tracked files.
+
+       add-excluded	Add files to the excluded list.
+
+       remove-excluded	Remove files from the excluded list.
+       			(Allow them to be tracked again)
    
        push   	        Sync the tracked files with the sandbox server.
    
@@ -505,6 +522,110 @@ function add_files_to_FILES() {
 	    FILES+=($(realpath --relative-to="${SANDBOX_PROJECT_DIR}" "$file"))
 	fi
     done
+}
+
+
+################################################################################
+# List, add, and remove files from being excluded to be tracked.
+#
+# Arguments:
+#    $1     - action [one of "list", "add", "remove"]
+#    $2..$n - files to add or remove
+#             (if a filename / path contains whitespace it has to be enclosed
+#              in quotation marks)
+#
+# Global Variables:
+#    SANDBOX_SETTINGS_FILE [read_setting(); write_setting()]
+#
+# Output:
+#    "list" - writes the files contained in the setting separated by newlines
+#    "add"  - adds the files to the setting EXCLUDED_FILES [write_setting()]
+#    "remove" - removes files from setting EXCLUDED_FILES [write_setting()]
+#
+function excluded_files() {
+    declare -a excluded_files
+    local action
+
+    if [[ -z "$1" ]]; then
+	echo "excluded_files() Error: no action specified." >&2
+	exit 1
+    fi
+
+    ## use path separator ':' to allow spaces in names
+    IFS=$':\n'    
+    excluded_files=($(read_setting "EXCLUDED_FILES"))
+
+    action="$1"
+    shift
+    self+=("$action")
+
+    case "$action" in
+	"list")
+	    ## Output the files separated by new lines
+	    ##
+	    for file in "${excluded_files[@]}"; do
+    		printf "%s\n" "$file"
+	    done
+	    ;;
+	
+	"add")
+	    ## Append the newly specified names
+	    ##
+	    for file in "$@"; do
+    		excluded_files+=("$file")
+	    done
+	    
+	    write_setting "EXCLUDED_FILES" "${excluded_files[*]}"
+	    excluded_sort_and_remove_duplicates
+	    ;;
+	
+	"remove")
+	    ## Check if one of the specified files matches, and if so,
+	    ## do not keep it in the excluded files list.
+	    ##
+	    declare -a new_excluded_files
+	    
+	    for ex_file in "${excluded_files[@]}"; do
+		for file in "$@"; do
+    		    if [[ "$file" == "$ex_file" ]]; then
+			continue 2
+		    fi
+		done
+		new_excluded_files+=("$ex_file")
+	    done
+
+	    write_setting "EXCLUDED_FILES" "${new_excluded_files[*]}"
+	    excluded_sort_and_remove_duplicates
+	    ;;
+	
+	*)
+	    unset IFS
+	    echo "${self[@]} unknown action ${action}" >&2
+	    exit 1
+    esac
+    
+    unset IFS
+    
+    exit 0
+}
+
+################################################################################
+# Helper for excluded_files() 
+#
+function excluded_sort_and_remove_duplicates() {
+    local enclosing_IFS
+    declare -a excluded_files
+    declare -a sorted_files
+
+    readonly enclosing_IFS="$IFS"
+    IFS=$':\n'
+    
+    excluded_files=($(read_setting "EXCLUDED_FILES"))
+    sorted_files=($(printf "%s\n" "${excluded_files[@]}" | sort | uniq ))
+    
+    write_setting "EXCLUDED_FILES" "${sorted_files[*]}"
+    
+    IFS="$enclosing_IFS"
 }
 
 
