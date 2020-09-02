@@ -1,19 +1,40 @@
 #!/bin/bash
 #
-# Push your project to a sandbox folder for quick testing.
-# Script to provide functionality to sync a project folder with a corresponding
-# folder on a server (Virtual Box Guest).
-# Just using a shared folder turned out to be problematic, as the file
-# permissions set for this folder (root/vboxsf) change the environment when
-# e.g. testing makefile installs ...
+# sandbox.bash - Push the contents of a folder to a Virtual Machine for testing.
+#
+# This script provides functionality to quickly sync certain files of a project
+# folder with a corresponding folder on a server (i.e. VirtualBox guest) via rsync.
+# The general idea is that a shared folder set up for a virtual machine has
+# file permissions that don't reflect the permissions on the host (development)
+# system. E.g. in a virtual box guest (https://www.virtualbox.org/) the
+# owner/group of the shared folder will be root/vboxsf.
+# Therefore, sandbox.bash uses a ssh connection and rsync to the
+# virtual testing machine to conveniently sync the contents of the development
+# system with the testing 'sandbox'.
 # No pull is provided as the idea is to make all the changes on the host, and
-# only push for testing the current state.
+# only push the current state for testing the VM guest.
 # 
 # @Name:         sandbox.bash
-# @Author:       Tobias Marczewski
-# @Last Edit:    2020-08-31
-# @Version:      0.8
+# @Author:       Tobias Marczewski <vortex@e.mail.de>
+# @Last Edit:    2020-09-02
+# @Version:      1.0
 # @Location:     /usr/local/bin/sandbox
+#
+#    Copyright (C) 2020 Tobias Marczewski
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
 #
 
 # for +( ) in parameter expansion
@@ -103,8 +124,16 @@ function main() {
 
 
 function usage() {
-
+    ## TODO add webpage (git hub)
     cat <<-EOF
+
+   ${self[0]}  version 1.0
+   Copyright (C) 2020 Tobias Marczewski
+
+   This program comes with ABSOLUTELY NO WARRANTY.  This is free software,
+   and you are welcome to redistribute it under certain conditions.
+   See the GNU General Public License for details.
+   (https://www.gnu.org/licenses/)
 
    Sync selected files of a local project directory with a sandbox directory
    on a server (a virtual machine) for testing purposes.
