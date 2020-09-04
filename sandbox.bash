@@ -41,6 +41,7 @@
 shopt -s extglob
 
 ## Fixed variable settings
+declare -r VERSION="1.0"
 SANDBOX_PROJECT_DIR=$(pwd)
 SANDBOX_SETTINGS_FOLDER="${SANDBOX_PROJECT_DIR}/.sandbox"
 SANDBOX_SETTINGS_FILE="${SANDBOX_SETTINGS_FOLDER}/sandbox.settings"
@@ -70,16 +71,11 @@ function main() {
     readonly action="$1"
     shift
     self+=("${action}")
-
-    if ( ( ! is_sandbox_enabled ) &&
-	     ! ( [[ "$action" == "setup" ]] || [[ "$action" == "usage" ]] ) )
-    then
-	echo "Current project is not setup for ${self[0]} yet." >&2
-	echo "Please see '${self[0]} usage' or use '${self[0]} setup'." >&2
-	exit 1
-    fi
     
     case "$action" in
+	"version")
+	    echo "$VERSION"
+	    ;;
 	"usage")
 	    usage
 	    ;;
@@ -87,30 +83,39 @@ function main() {
 	    setup
 	    ;;
 	"clean")
+	    ensure_dir_is_sandbox_enabled
 	    clean_all
 	    ;;
 	"server")
+	    ensure_dir_is_sandbox_enabled
 	    server_settings "$@"
 	    ;;
 	"list")
+	    ensure_dir_is_sandbox_enabled
 	    list_tracked_files
 	    ;;
 	"add")
+	    ensure_dir_is_sandbox_enabled
 	    add_to_tracked_files "$@"
 	    ;;
 	"remove")
+	    ensure_dir_is_sandbox_enabled
 	    remove_from_tracked_files "$@"
 	    ;;
 	"list-excluded")
+	    ensure_dir_is_sandbox_enabled
 	    files_excluded_from_tracking "list"
 	    ;;
 	"add-excluded")
+	    ensure_dir_is_sandbox_enabled
 	    files_excluded_from_tracking "add" "$@"
 	    ;;
 	"remove-excluded")
+	    ensure_dir_is_sandbox_enabled
 	    files_excluded_from_tracking "remove" "$@"
 	    ;;
 	"push")
+	    ensure_dir_is_sandbox_enabled
 	    push_files_to_server
 	    ;;
 	*)
@@ -127,7 +132,7 @@ function usage() {
     ## TODO add webpage (git hub)
     cat <<-EOF
 
-   ${self[0]}  version 1.0
+   ${self[0]}  version ${VERSION}
    Copyright (C) 2020 Tobias Marczewski
 
    This program comes with ABSOLUTELY NO WARRANTY.  This is free software,
@@ -167,12 +172,28 @@ function usage() {
        			(Allow them to be tracked again)
    
        push   	        Sync the tracked files with the sandbox server.
+
+       version		Print version of ${self[0]}.
    
 EOF
 
     return 0
 }
 
+
+
+################################################################################
+# Test for any function/action that needs the files created during setup to
+# ensure the current directory contains those.
+#
+function ensure_dir_is_sandbox_enabled() {
+    
+    if ( ! is_sandbox_enabled ); then
+	echo "Current project is not setup for ${self[0]} yet." >&2
+	echo "Please see '${self[0]} usage' or use '${self[0]} setup'." >&2
+	exit 1
+    fi
+}
 
 ################################################################################
 # Check if the current project/directory has a setup sandbox environment.
