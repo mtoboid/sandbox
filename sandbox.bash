@@ -63,7 +63,7 @@ function main() {
     
     if [[ -z "$1" ]]; then
 	echo "Error: No action specified!" >&2
-	echo "See '${self} usage for info." >&2
+	echo "See '${self} usage' for info." >&2
 	exit 1
     fi
 

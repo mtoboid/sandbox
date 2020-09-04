@@ -1,0 +1,70 @@
+#+TITLE: Sandbox
+#+AUTHOR: Tobias Marczewski (mtoboid)
+#+LANGUAGE: en
+
+* Sandbox
+
+Quickly sync selected files from your project with a VM testing machine.
+
+
+* Rationale
+
+Testing your code can break things, or leave unwanted rubbish in places you
+don't expect. That's why using a Virtual Machine (VM) is so convenient:
+1) run your code -> 2) screw up -> 3) rewind -> 4) improve -> back to 1)
+
+For many scenarios a normal shared folder does the job - code on host, execute on
+guest. However, the shared folder has different file permissions as it is mounted
+akin to a network share ([[https://docs.oracle.com/en/virtualization/virtualbox/6.1/user/sharedfolders.html][VirtualBox 6.1]]), and hence is owned by root and
+restricted to the group vboxsf.
+
+Enabling an ssh server on the guest and using [[https://rsync.samba.org/][rsync]] to transfer the files while
+keeping all file permissions as on the host allows for a better 1:1 replication,
+and avoids execution errors due to permission mismatches.
+
+
+* Dependencies
+
++ bash
++ rsync
++ VM running ssh server
+
+
+* Example setup with a VM (VirtualBox)
+  1. [[Install]] Sandbox.
+  2. Install [[https://www.virtualbox.org/][VirtualBox]]
+  3. Setup your favourite distro as testing machine
+     (I mostly use the [[https://www.debian.org/distrib/netinst][Netinstallfrom Debian]]) 
+  4. After the machine is installed enable a second Guest-Host network adapter
+     for the machine:
+     + Settings -> Network -> 'Adapter 2': 'Host-only Adapter'; 'vboxnet0'
+     + Start the guest
+     + (On Host) check that 'vboxnet0' is detected =ip link show=
+     + (On Host) and note the ip address range =ip addr show=
+       /in my case it was 192.168.56.1/
+     + (On Guest) get the devicename for the network adapter =ip link show=
+       /in my case it was enp0s8/
+     + (on Guest) place a config for the adapter in
+       =/etc/network/interfaces.d/${devicename}.config=:
+       #+begin_src bash
+	 # Replace the xxx with whatever static ip you want to assign to the guest.
+	 # We'll use 200 for this example
+	 auto ${devicename}
+	 iface ${devicename} inet static
+	     address 192.168.56.xxx/24
+	     network 192.168.56.0
+	     broadcast 192.168.56.255
+       #+end_src
+     + Reboot the guest and ensure everything is working:
+       - =ip addr show= -> 192.168.56.200 (or whatever you chose)
+       - =systemctl status ssh= -> active (running)
+     + (On Host) =ssh user@192.168.56.200= should now work
+  5. Now go to your project and setup Sandbox =sandbox setup=!
+
+
+* Install
+  1. Clone the repo =git clone ...TODO=
+  2. Use 'install' to install the script:
+     #+begin_src bash
+       install sandbox.bash /usr/local/bin/sandbox
+     #+end_src
