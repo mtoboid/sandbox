@@ -766,7 +766,8 @@ function push_files_to_server() {
     ## Ensure Sandbox folder exists on server
     local exec_command
     exec_command=$(echo "[[ ! -e \"${SANDBOX_SERVER_SANDBOX_DIR}\" ]] && " \
-    			"mkdir -p \"${SANDBOX_SERVER_SANDBOX_DIR}\"")
+    			"mkdir -p \"${SANDBOX_SERVER_SANDBOX_DIR}\" ||
+			exit 0")
 
     execute_on_server "$exec_command"
 
