@@ -52,7 +52,7 @@ SANDBOX_TRACKED_FILES_FILE="${SANDBOX_SETTINGS_FOLDER}/tracked.files"
 
 ## Read from the settings file $SANDBOX_SETTINGS_FILE
 unset SANDBOX_SERVER_SANDBOX_DIR
-unset EXCLUDED_FILES
+declare -a EXCLUDED_FILES
 
 ## MAIN
 function main() {
@@ -199,14 +199,55 @@ EOF
 ################################################################################
 # Test for any function/action that needs the files created during setup to
 # ensure the current directory contains those.
+# Also set variables that are read from settings files.
 #
 function ensure_dir_is_sandbox_enabled() {
+    local enclosing_IFS
+    declare -i exit_code
     
     if ( ! is_sandbox_enabled ); then
 	echo "Current project is not setup for ${self[0]} yet." >&2
 	echo "Please see '${self[0]} usage' or use '${self[0]} setup'." >&2
 	exit 1
     fi
+
+    enclosing_IFS="$IFS"
+    IFS=$'\n'
+    
+    ## set variables
+    SANDBOX_SERVER_SANDBOX_DIR=$(read_setting "SANDBOX_SERVER_SANDBOX_DIR")
+
+    exit_code="$?"
+    if (( "$exit_code" != 0 )); then
+	echo "Error setting SANDBOX_SERVER_SANDBOX_DIR." >&2
+	exit 1
+    fi
+
+    ## don't allow an empty string as a 'sync' would then wipe the whole
+    ## HOME dir clean
+    ##
+    if [[ -z "$SANDBOX_SERVER_SANDBOX_DIR" ]]; then
+	echo "Error: sandbox server base directory not set or set to empty string." >&2
+	exit 1
+    fi
+    
+    EXCLUDED_FILES=($(files_excluded_from_tracking "list"))
+
+    exit_code="$?"
+    if (( "$exit_code" != 0 )); then
+	echo "Error setting EXCLUDED_FILES." >&2
+	exit 1
+    fi
+
+    if [[ ! "${EXCLUDED_FILES+xx}" == "xx" ]]; then
+	echo "Error: EXCLUDED_FILES not set after reading settings." >&2
+	exit 1
+    fi
+    
+
+    IFS="$enclosing_IFS"
+    
+    return 0
 }
 
 ################################################################################
@@ -596,6 +637,9 @@ function file_is_being_tracked() {
 # Arguments:
 #    $1 - path to file containing filenames / dirnames (one per line)
 #
+# Global Variables:
+#    EXCLUDED_FILES
+#
 # Output:
 #    none - file provided as argument is changed in place.
 #
@@ -628,9 +672,9 @@ function sort_and_remove_duplicates() {
     IFS=$'\n'
     
     files=($(sort "$textfile" | uniq))
-    excluded_files=($(files_excluded_from_tracking "list"))
+
     ## escape dots
-    excluded_files="${excluded_files//./\\.}"
+    excluded_files="${EXCLUDED_FILES//./\\.}"
     ## replace globbing * with regex .*
     excluded_files="${excluded_files//\*/.*}"
 
@@ -727,9 +771,7 @@ function files_excluded_from_tracking() {
 	"list")
 	    ## Output the files separated by new lines
 	    ##
-	    for file in "${excluded_files[@]}"; do
-    		printf "%s\n" "$file"
-	    done
+	    printf "%s\n" "${excluded_files[@]}"
 	    ;;
 	
 	"add")
@@ -803,7 +845,6 @@ function excluded_sort_and_remove_duplicates() {
 #
 function push_files_to_server() {
 
-    SANDBOX_SERVER_SANDBOX_DIR=$(read_setting "SANDBOX_SERVER_SANDBOX_DIR")
     sort_and_remove_duplicates "$SANDBOX_TRACKED_FILES_FILE"
     
     if ( ! server_online ); then
@@ -850,6 +891,9 @@ function push_files_to_server() {
 # Delete files and directories that are not in the tracked files list on the
 # server.
 #
+# Global Variables:
+#    SANDBOX_SERVER_SANDBOX_DIR
+#
 function delete_untracked_files_on_sandbox_server() {
     local enclosing_IFS
     local ssh_command
@@ -868,6 +912,13 @@ function delete_untracked_files_on_sandbox_server() {
 	fi
     done
 
+    ## if no files are to be deleted, exit here
+    ##
+    if (( "${#files_to_delete[@]}" <= 0 )); then
+	IFS="$enclosing_IFS"
+	return 0
+    fi
+    
     read -r -d '' ssh_command <<-EOF
     declare -a files_to_delete=($(printf "\"%s\" " "${files_to_delete[@]}"))
 
