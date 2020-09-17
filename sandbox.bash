@@ -165,9 +165,14 @@ function usage() {
            	        
        list	        Display files currently tracked for syncing.
    
-       add <files>      Add files to the tracked list (supports globbing).
+       add <files>      Add files to the tracked list (supports *).
+       	   		Note: globbing happens before the list is passed to 'add',
+       			hence don't quote the pattern (as opposed to 'remove').
    
-       remove <files>   Remove files from the tracked list (supports globbing).
+       remove <files>   Remove files from the tracked list (supports *).
+       	      		Note: When using wildcards the pattern has to be quoted,
+       			as otherwise globbing takes place before the pattern is
+       			passed to 'remove'.
 
        list-excluded	List files currently never added to the tracked files.
 
