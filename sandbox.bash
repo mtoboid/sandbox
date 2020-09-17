@@ -118,6 +118,11 @@ function main() {
 	    ensure_dir_is_sandbox_enabled
 	    push_files_to_server
 	    ;;
+	"sync")
+	    ensure_dir_is_sandbox_enabled
+	    delete_untracked_files_on_sandbox_server
+	    push_files_to_server
+	    ;;
 	*)
 	    echo "Unknown action ${action}." >&2
 	    echo "See '${self[0]} usage' for info." >&2
@@ -171,7 +176,11 @@ function usage() {
        remove-excluded	Remove files from the excluded list.
        			(Allow them to be tracked again)
    
-       push   	        Sync the tracked files with the sandbox server.
+       push   	        Update the tracked files on the sandbox server.
+
+       sync             Delete untracked files from sandbox server, and then update
+       			the tracked files. You should consider running 'sync' once after
+			changing the tracked files list.
 
        version		Print version of ${self[0]}.
    
@@ -540,6 +549,40 @@ function remove_from_tracked_files() {
 }
 
 ################################################################################
+# Check if the file passed is being tracked, OR
+# if the passed directory is part of a path of a tracked file
+# (or being tracked itself)
+#
+# Arguments:
+#    $1 - file / dir to test
+#
+# Global Variables:
+#    SANDBOX_TRACKED_FILES_FILE
+#
+# Returns:
+#    0 - (true) = the file is listed in the tracked files file
+#    1 - (false) = the file/dir is not being tracked.
+#
+function file_is_being_tracked() {
+    local file
+    local pattern
+
+    if [[ -z "$1" ]]; then
+	echo "file_is_being_tracked() Error: no argument provided." >&2
+	exit 1
+    fi
+
+    file="${1##/}"
+    pattern="^${file%%/}"
+    
+    if (( $(grep -c "$pattern" "$SANDBOX_TRACKED_FILES_FILE") > 0 )); then
+	return 0
+    else
+	return 1
+    fi
+}
+
+################################################################################
 # Sort the filenames / paths in a file (one per line) and remove duplicates.
 # Also removes:
 #    - any non-existing files
@@ -793,6 +836,96 @@ function push_files_to_server() {
 	echo "Error during rsync (code: ${exit_code})" >&2
 	exit 1
     fi
+    
+    return 0
+}
+
+
+################################################################################
+# Delete files and directories that are not in the tracked files list on the
+# server.
+#
+function delete_untracked_files_on_sandbox_server() {
+    local enclosing_IFS
+    local ssh_command
+    declare -i exit_code
+    declare -a files_on_server
+    declare -a files_to_delete
+
+    readonly enclosing_IFS="$IFS"
+    IFS=$'\n'
+
+    files_on_server=($(list_sandbox_server_files))
+
+    for file in "${files_on_server[@]}"; do
+	if ( ! file_is_being_tracked "$file" ); then
+	    files_to_delete+=("$file")
+	fi
+    done
+
+    read -r -d '' ssh_command <<-EOF
+    declare -a files_to_delete=($(printf "\"%s\" " "${files_to_delete[@]}"))
+
+    for file in "\${files_to_delete[@]}"; do
+    	rm -rf "./${SANDBOX_SERVER_SANDBOX_DIR}/\${file}"
+    done
+
+    exit
+EOF
+
+    execute_on_server "${ssh_command}"
+
+    exit_code="$?"
+    
+    if (( "$exit_code" != 0 )); then
+	echo "delete_untracked_files_on_sandbox_server() SSH Error code: ${exit_code}." >&2
+	exit "$exit_code"
+    fi
+
+    IFS="$enclosing_IFS"
+    
+    return 0
+}
+
+################################################################################
+# List all files currently on the sanbox server
+#
+# Global Variables:
+#    SANDBOX_SERVER_SANDBOX_DIR
+#
+# Output:
+#    a list of files, each entry separated by new line '\n'
+#
+function list_sandbox_server_files() {
+    declare -a files_on_server
+    declare -i  exit_code
+    local ssh_command
+    local enclosing_IFS
+
+    ## If the sandbox folder exists list the files, otherwise there is
+    ## nothing to list...
+    ##
+    read -r -d '' ssh_command <<-EOF
+    if [[ -e "./${SANDBOX_SERVER_SANDBOX_DIR}" ]]; then
+       find "./${SANDBOX_SERVER_SANDBOX_DIR}" -mindepth 1 -path "*"
+    fi
+    exit 0
+EOF
+
+    enclosing_IFS="$IFS"
+    IFS=$'\n'
+
+    files_on_server=($(execute_on_server "$ssh_command"))
+
+    exit_code="$?"
+    
+    if (( "$exit_code" != 0 )); then
+	echo "list_sandbox_server_files() SSH Error code: ${exit_code}." >&2
+	exit "$exit_code"
+    fi
+
+    echo  "${files_on_server[*]#./${SANDBOX_SERVER_SANDBOX_DIR}/}"
+    IFS="$enclosing_IFS"
     
     return 0
 }
