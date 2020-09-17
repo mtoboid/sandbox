@@ -180,7 +180,7 @@ function usage() {
 
        sync             Delete untracked files from sandbox server, and then update
        			the tracked files. You should consider running 'sync' once after
-			changing the tracked files list.
+                        changing the tracked files list.
 
        version		Print version of ${self[0]}.
    
