@@ -31,20 +31,35 @@ and avoids execution errors due to permission mismatches.
 
 
 * Example setup with a VM (VirtualBox)
-  1. [[Install]] Sandbox.
+
+  1. [[Install][Install]] Sandbox.
+
   2. Install [[https://www.virtualbox.org/][VirtualBox]]
-  3. Setup your favourite distro as testing machine
-     (I mostly use the [[https://www.debian.org/distrib/netinst][Netinstallfrom Debian]]) 
+
+  3. Set up your favourite distro as testing machine
+     (I mostly use the [[https://www.debian.org/distrib/netinst][Netinstall from Debian]])
+
   4. After the machine is installed enable a second Guest-Host network adapter
      for the machine:
+
      + Settings -> Network -> 'Adapter 2': 'Host-only Adapter'; 'vboxnet0'
-     + Start the guest
-     + (On Host) check that 'vboxnet0' is detected =ip link show=
+
+     + Start the Guest
+
+     + (On Host) check that 'vboxnet0' is detected
+       #+begin_src bash
+	 ip link show
+       #+end_src
+
      + (On Host) and note the ip address range =ip addr show=
+
        /in my case it was 192.168.56.1/
+
      + (On Guest) get the devicename for the network adapter =ip link show=
+
        /in my case it was enp0s8/
-     + (on Guest) place a config for the adapter in
+
+     + (On Guest) place a config for the adapter in
        =/etc/network/interfaces.d/${devicename}.config=:
        #+begin_src bash
 	 # Replace the xxx with whatever static ip you want to assign to the guest.
@@ -55,15 +70,20 @@ and avoids execution errors due to permission mismatches.
 	     network 192.168.56.0
 	     broadcast 192.168.56.255
        #+end_src
-     + Reboot the guest and ensure everything is working:
+
+     + Reboot the Guest and ensure everything is working:
        - =ip addr show= -> 192.168.56.200 (or whatever you chose)
        - =systemctl status ssh= -> active (running)
+
      + (On Host) =ssh user@192.168.56.200= should now work
+
   5. Now go to your project and setup Sandbox =sandbox setup=!
 
 
 * Install
+
   1. Clone the repo =git clone ...TODO=
+
   2. Use 'install' to install the script:
      #+begin_src bash
        install sandbox.bash /usr/local/bin/sandbox
