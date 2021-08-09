@@ -1,5 +1,7 @@
 #!/bin/bash
 #
+# SPDX-License-Identifier: GPL-3.0-or-later
+# 
 # sandbox.bash - Push the contents of a folder to a Virtual Machine for testing.
 #
 # This script provides functionality to quickly sync certain files of a project
@@ -15,12 +17,12 @@
 # only push the current state for testing the VM guest.
 # 
 # @Name:         sandbox.bash
-# @Author:       Tobias Marczewski <vortex@e.mail.de>
-# @Last Edit:    2020-09-02
-# @Version:      1.0
+# @Author:       Tobias Marczewski (mtoboid) <vortex@e.mail.de>
+# @Version:      1.0.1
+declare -r VERSION="1.0.1"
 # @Location:     /usr/local/bin/sandbox
 #
-#    Copyright (C) 2020 Tobias Marczewski
+#    Copyright (C) 2020-2021 Tobias Marczewski
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -35,13 +37,12 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
-#
+
 
 # for +( ) in parameter expansion
 shopt -s extglob
 
-## Fixed variable settings
-declare -r VERSION="1.0"
+## Variables (1 - defined here)
 SANDBOX_PROJECT_DIR=$(pwd)
 SANDBOX_SETTINGS_FOLDER="${SANDBOX_PROJECT_DIR}/.sandbox"
 SANDBOX_SETTINGS_FILE="${SANDBOX_SETTINGS_FOLDER}/sandbox.settings"
@@ -50,14 +51,14 @@ SANDBOX_SSH_CONFIG="${SANDBOX_SSH_FOLDER}/config"
 SANDBOX_SSH_KEY="${SANDBOX_SSH_FOLDER}/server_rsa"
 SANDBOX_TRACKED_FILES_FILE="${SANDBOX_SETTINGS_FOLDER}/tracked.files"
 
-## Read from the settings file $SANDBOX_SETTINGS_FILE
+## Variables (2 - Read from the settings file $SANDBOX_SETTINGS_FILE)
 unset SANDBOX_SERVER_SANDBOX_DIR
 declare -a EXCLUDED_FILES
 
 ## MAIN
 function main() {
-    ## Build an array for 'self' to be able to append the action
-    ## chosen - for better error output.
+    ## Build an array for 'self' to be able to append the action chosen -
+    ## for better error output.
     ##
     declare -a self=("${0##*/}")
     local action
@@ -76,7 +77,7 @@ function main() {
 	"version")
 	    echo "$VERSION"
 	    ;;
-	"usage")
+	"usage"|"help")
 	    usage
 	    ;;
 	"setup")
@@ -138,16 +139,18 @@ function usage() {
     cat <<-EOF
 
    ${self[0]}  version ${VERSION}
-   Copyright (C) 2020 Tobias Marczewski
+
+   Sync selected files of a local project directory with a sandbox directory
+   on a server (a virtual machine) for testing purposes.
+
+   Copyright (C) 2020-2021 Tobias Marczewski (mtoboid)
 
    This program comes with ABSOLUTELY NO WARRANTY.  This is free software,
    and you are welcome to redistribute it under certain conditions.
    See the GNU General Public License for details.
    (https://www.gnu.org/licenses/)
 
-   Sync selected files of a local project directory with a sandbox directory
-   on a server (a virtual machine) for testing purposes.
-
+   
    Usage: ${self[0]} ACTION
    
    Actions:
@@ -188,6 +191,9 @@ function usage() {
                         changing the tracked files list.
 
        version		Print version of ${self[0]}.
+
+
+       For bug reports, comments and contributions go to https://github.com/mtoboid/sandbox
    
 EOF
 
