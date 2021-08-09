@@ -325,7 +325,7 @@ function setup() {
        "$(realpath --relative-to=${SANDBOX_PROJECT_DIR} ${SANDBOX_SETTINGS_FOLDER}):.git*"
    
     ## Generate ssh key
-    ssh-keygen -t rsa -N '' -f "$SANDBOX_SSH_KEY"
+    ssh-keygen -t ed25519 -N '' -f "$SANDBOX_SSH_KEY"
 
     if (( "$?" != 0 )); then
 	setup_error "Couldn't create ssh key."
